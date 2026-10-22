@@ -152,6 +152,7 @@ architecture neorv32_cpu_alu_bitmanip_rtl of neorv32_cpu_alu_bitmanip is
   signal multi_cmd  : std_ulogic;
   signal shift_cmd  : std_ulogic;
   signal cmd        : std_ulogic_vector(op_width_c-1 downto 0);
+  signal cmd_reg    : std_ulogic_vector(op_width_c-1 downto 0);
   signal valid      : std_ulogic;
 
   -- operand buffers --
@@ -279,6 +280,7 @@ begin
   begin
     if rising_edge(clk_i) then
       if (ctrl_i.alu_cp_alu = '1') then
+        cmd_reg  <= cmd;
         less_reg <= less_i;
         rs1_reg  <= rs1_i;
         rs2_reg  <= rs2_i;
@@ -555,28 +557,29 @@ begin
 
   -- Output Stage ---------------------------------------------------------------------------
   -- -------------------------------------------------------------------------------------------
-  res(op_andn_c)   <= res_int(op_andn_c)   when (cmd(op_andn_c)   = '1') else (others => '0');
-  res(op_orn_c)    <= res_int(op_orn_c)    when (cmd(op_orn_c)    = '1') else (others => '0');
-  res(op_xnor_c)   <= res_int(op_xnor_c)   when (cmd(op_xnor_c)   = '1') else (others => '0');
-  res(op_cz_c)     <= res_int(op_cz_c)     when (cmd(op_cz_c)     = '1') else (others => '0');
-  res(op_cpop_c)   <= res_int(op_cpop_c)   when (cmd(op_cpop_c)   = '1') else (others => '0');
-  res(op_max_c)    <= res_int(op_max_c)    when (cmd(op_max_c)    = '1') else (others => '0');
-  res(op_sext_c)   <= res_int(op_sext_c)   when (cmd(op_sext_c)   = '1') else (others => '0');
-  res(op_zexth_c)  <= res_int(op_zexth_c)  when (cmd(op_zexth_c)  = '1') else (others => '0');
-  res(op_rot_c)    <= res_int(op_rot_c)    when (cmd(op_rot_c)    = '1') else (others => '0');
-  res(op_orcb_c)   <= res_int(op_orcb_c)   when (cmd(op_orcb_c)   = '1') else (others => '0');
-  res(op_rev8_c)   <= res_int(op_rev8_c)   when (cmd(op_rev8_c)   = '1') else (others => '0');
-  res(op_shadd_c)  <= res_int(op_shadd_c)  when (cmd(op_shadd_c)  = '1') else (others => '0');
-  res(op_bclr_c)   <= res_int(op_bclr_c)   when (cmd(op_bclr_c)   = '1') else (others => '0');
-  res(op_bext_c)   <= res_int(op_bext_c)   when (cmd(op_bext_c)   = '1') else (others => '0');
-  res(op_binv_c)   <= res_int(op_binv_c)   when (cmd(op_binv_c)   = '1') else (others => '0');
-  res(op_bset_c)   <= res_int(op_bset_c)   when (cmd(op_bset_c)   = '1') else (others => '0');
-  res(op_pack_c)   <= res_int(op_pack_c)   when (cmd(op_pack_c)   = '1') else (others => '0');
-  res(op_zip_c)    <= res_int(op_zip_c)    when (cmd(op_zip_c)    = '1') else (others => '0');
-  res(op_brev8_c)  <= res_int(op_brev8_c)  when (cmd(op_brev8_c)  = '1') else (others => '0');
-  res(op_clmul_c)  <= res_int(op_clmul_c)  when (cmd(op_clmul_c)  = '1') else (others => '0');
-  res(op_clmulr_c) <= res_int(op_clmulr_c) when (cmd(op_clmulr_c) = '1') else (others => '0');
-  res(op_xperm_c)  <= res_int(op_xperm_c)  when (cmd(op_xperm_c)  = '1') else (others => '0');
+  -- the instruction word is stable while the co-processor is busy; use the decode buffered at trigger time --
+  res(op_andn_c)   <= res_int(op_andn_c)   when (cmd_reg(op_andn_c)   = '1') else (others => '0');
+  res(op_orn_c)    <= res_int(op_orn_c)    when (cmd_reg(op_orn_c)    = '1') else (others => '0');
+  res(op_xnor_c)   <= res_int(op_xnor_c)   when (cmd_reg(op_xnor_c)   = '1') else (others => '0');
+  res(op_cz_c)     <= res_int(op_cz_c)     when (cmd_reg(op_cz_c)     = '1') else (others => '0');
+  res(op_cpop_c)   <= res_int(op_cpop_c)   when (cmd_reg(op_cpop_c)   = '1') else (others => '0');
+  res(op_max_c)    <= res_int(op_max_c)    when (cmd_reg(op_max_c)    = '1') else (others => '0');
+  res(op_sext_c)   <= res_int(op_sext_c)   when (cmd_reg(op_sext_c)   = '1') else (others => '0');
+  res(op_zexth_c)  <= res_int(op_zexth_c)  when (cmd_reg(op_zexth_c)  = '1') else (others => '0');
+  res(op_rot_c)    <= res_int(op_rot_c)    when (cmd_reg(op_rot_c)    = '1') else (others => '0');
+  res(op_orcb_c)   <= res_int(op_orcb_c)   when (cmd_reg(op_orcb_c)   = '1') else (others => '0');
+  res(op_rev8_c)   <= res_int(op_rev8_c)   when (cmd_reg(op_rev8_c)   = '1') else (others => '0');
+  res(op_shadd_c)  <= res_int(op_shadd_c)  when (cmd_reg(op_shadd_c)  = '1') else (others => '0');
+  res(op_bclr_c)   <= res_int(op_bclr_c)   when (cmd_reg(op_bclr_c)   = '1') else (others => '0');
+  res(op_bext_c)   <= res_int(op_bext_c)   when (cmd_reg(op_bext_c)   = '1') else (others => '0');
+  res(op_binv_c)   <= res_int(op_binv_c)   when (cmd_reg(op_binv_c)   = '1') else (others => '0');
+  res(op_bset_c)   <= res_int(op_bset_c)   when (cmd_reg(op_bset_c)   = '1') else (others => '0');
+  res(op_pack_c)   <= res_int(op_pack_c)   when (cmd_reg(op_pack_c)   = '1') else (others => '0');
+  res(op_zip_c)    <= res_int(op_zip_c)    when (cmd_reg(op_zip_c)    = '1') else (others => '0');
+  res(op_brev8_c)  <= res_int(op_brev8_c)  when (cmd_reg(op_brev8_c)  = '1') else (others => '0');
+  res(op_clmul_c)  <= res_int(op_clmul_c)  when (cmd_reg(op_clmul_c)  = '1') else (others => '0');
+  res(op_clmulr_c) <= res_int(op_clmulr_c) when (cmd_reg(op_clmulr_c) = '1') else (others => '0');
+  res(op_xperm_c)  <= res_int(op_xperm_c)  when (cmd_reg(op_xperm_c)  = '1') else (others => '0');
 
   -- OR all --
   res_or: process(res)

@@ -34,7 +34,8 @@ module neorv32_cpu_regfile #(
   output [31:0] rs1_data_o, // read data
   // read port 2 (rs2)
   input  [4:0]  rs2_addr_i, // address
-  output [31:0] rs2_data_o  // read data
+  output [31:0] rs2_data_o, // read data
+  output [3:0]  cmp_o       // ARCHSEL=2: immediate equality, signed/unsigned less-than, equality
 );
 
   localparam NUM_REGS = 2**AWIDTH;
@@ -111,6 +112,18 @@ module neorv32_cpu_regfile #(
   // -------------------------------------------------------------------------------------------
   generate
     if (ARCHSEL == 2) begin
+
+      wire [31:0] cmp_rs1 = (rs1_addr == 0) ? 32'b0 : regfile[rs1_addr];
+      wire [31:0] cmp_rs2 = (rs2_addr == 0) ? 32'b0 : regfile[rs2_addr];
+      wire [31:0] cmp_imm = (rs2_addr_i == 0) ? 32'hffffffff : {27'b0, rs2_addr_i};
+      reg [3:0] cmp;
+      assign cmp_o = cmp;
+      always @(posedge clk_i) begin
+        cmp[0] <= (cmp_rs1 == cmp_rs2);
+        cmp[1] <= (cmp_rs1 < cmp_rs2);
+        cmp[2] <= ($signed(cmp_rs1) < $signed(cmp_rs2));
+        cmp[3] <= (cmp_rs1 == cmp_imm);
+      end
 
       integer i;
 
@@ -191,6 +204,12 @@ module neorv32_cpu_regfile #(
         end
       end
 
+    end
+  endgenerate
+
+  generate
+    if (ARCHSEL != 2) begin
+      assign cmp_o = 4'b0000;
     end
   endgenerate
 

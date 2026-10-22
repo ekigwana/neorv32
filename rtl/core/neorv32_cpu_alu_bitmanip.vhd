@@ -149,6 +149,8 @@ architecture neorv32_cpu_alu_bitmanip_rtl of neorv32_cpu_alu_bitmanip is
   type state_t is (S_IDLE, S_START, S_BUSY);
   signal state      : state_t;
   signal valid_cmd  : std_ulogic;
+  signal multi_cmd  : std_ulogic;
+  signal shift_cmd  : std_ulogic;
   signal cmd        : std_ulogic_vector(op_width_c-1 downto 0);
   signal valid      : std_ulogic;
 
@@ -224,6 +226,10 @@ begin
   -- Valid instruction? --
   valid_cmd <= '1' when (ctrl_i.alu_cp_alu = '1') and (or_reduce_f(cmd) = '1') else '0';
 
+  -- Multi-cycle operation? --
+  shift_cmd <= '1' when (not FAST_SHIFT) and ((cmd(op_cz_c) or cmd(op_cpop_c) or cmd(op_rot_c)) = '1') else '0';
+  multi_cmd <= shift_cmd or cmd(op_clmul_c) or cmd(op_clmulr_c);
+
 
   -- Co-Processor Controller ----------------------------------------------------------------
   -- -------------------------------------------------------------------------------------------
@@ -244,16 +250,13 @@ begin
 
         -- wait for operation trigger --
         when S_IDLE =>
-          if (valid_cmd = '1') then
-            if (not FAST_SHIFT) and ((cmd(op_cz_c) or cmd(op_cpop_c) or cmd(op_rot_c)) = '1') then -- multi-cycle shift operation
-              shifter_start <= '1';
-              state         <= S_START;
-            elsif (cmd(op_clmul_c) = '1') or (cmd(op_clmulr_c) = '1') then -- multi-cycle carry-less multiplication operation
-              clmul_start <= '1';
-              state       <= S_START;
-            else
-              valid <= '1';
-            end if;
+          if (ctrl_i.alu_cp_alu = '1') and (multi_cmd = '1') then -- decode only multi-cycle operations here
+            shifter_start <= shift_cmd;
+            clmul_start   <= not shift_cmd;
+            state         <= S_START;
+          end if;
+          if (valid_cmd = '1') and (multi_cmd = '0') then -- single-cycle operation
+            valid <= '1';
           end if;
 
         -- one cycle delay to start iterative operation --

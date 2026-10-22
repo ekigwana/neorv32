@@ -1231,7 +1231,8 @@ package neorv32_package is
     rs1_addr_i : in  std_ulogic_vector(4 downto 0);
     rs1_data_o : out std_ulogic_vector(31 downto 0);
     rs2_addr_i : in  std_ulogic_vector(4 downto 0);
-    rs2_data_o : out std_ulogic_vector(31 downto 0)
+    rs2_data_o : out std_ulogic_vector(31 downto 0);
+    cmp_o      : out std_ulogic_vector(3 downto 0)
   );
   end component;
 

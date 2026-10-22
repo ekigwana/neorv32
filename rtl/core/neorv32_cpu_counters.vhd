@@ -55,12 +55,14 @@ architecture neorv32_cpu_counters_rtl of neorv32_cpu_counters is
 
   -- HPM read-backs --
   type hpmevent_t is array (3 to 31) of std_ulogic_vector(cnt_event_width_c-1 downto 0);
-  type hpmcnt_t   is array (3 to 31) of std_ulogic_vector(63 downto 0);
+  type hpmcnt_t   is array (3 to 31) of std_ulogic_vector(31 downto 0);
   signal hpmevent, hpmevent_rd : hpmevent_t;
   signal hpmcnt_rd : hpmcnt_t;
 
   -- global CSR read-backs --
-  signal rdata64, cycle_rd, time_rd, instret_rd, hpm_rd, inhibit_rd, pmf_rd : std_ulogic_vector(63 downto 0);
+  signal cycle_rd, time_rd, instret_rd, hpm_rd : std_ulogic_vector(31 downto 0);
+  signal status64, inhibit_rd, pmf_rd : std_ulogic_vector(63 downto 0);
+  signal status_rd : std_ulogic_vector(31 downto 0);
 
 begin
 
@@ -71,7 +73,11 @@ begin
     sel(i)       <= '1' when (ctrl_i.csr_addr(4 downto 0) = std_ulogic_vector(to_unsigned(i, 5))) else '0';
     cnt_we(i)(0) <= cnt_acc and sel(i) and ctrl_i.csr_we and (not ctrl_i.csr_addr(7)); -- counter low word
     cnt_we(i)(1) <= cnt_acc and sel(i) and ctrl_i.csr_we and (    ctrl_i.csr_addr(7)); -- counter high word
-    cnt_re(i)    <= cnt_acc and sel(i) and ctrl_i.csr_re;
+    cnt_re(i)    <= ctrl_i.csr_re and bool_to_ulogic_f(
+      (ctrl_i.csr_addr = (csr_cycle_c(11 downto 5) & std_ulogic_vector(to_unsigned(i, 5)))) or
+      (ctrl_i.csr_addr = (csr_mcycle_c(11 downto 5) & std_ulogic_vector(to_unsigned(i, 5)))) or
+      (ctrl_i.csr_addr = (csr_cycleh_c(11 downto 5) & std_ulogic_vector(to_unsigned(i, 5)))) or
+      (ctrl_i.csr_addr = (csr_mcycleh_c(11 downto 5) & std_ulogic_vector(to_unsigned(i, 5)))));
     cfg_we(i)    <= cfg_acc and sel(i) and ctrl_i.csr_we;
     cfg_re(i)    <= cfg_acc and sel(i) and ctrl_i.csr_re;
   end generate;
@@ -86,8 +92,9 @@ begin
   pmf_acc <= '1' when ((ctrl_i.csr_addr = csr_mcyclecfgh_c) or (ctrl_i.csr_addr = csr_minstretcfgh_c)) else '0';
 
   -- global CSR read-back and subword select --
-  rdata64 <= cycle_rd or time_rd or instret_rd or hpm_rd or inhibit_rd or pmf_rd;
-  rdata_o <= rdata64(63 downto 32) when (ctrl_i.csr_addr(7) = '1') else rdata64(31 downto 0);
+  status64 <= inhibit_rd or pmf_rd;
+  status_rd <= status64(63 downto 32) when (ctrl_i.csr_addr(7) = '1') else status64(31 downto 0);
+  rdata_o <= cycle_rd or time_rd or instret_rd or hpm_rd or status_rd;
 
 
   -- Counter-Inhibit CSR --------------------------------------------------------------------
@@ -202,6 +209,15 @@ begin
   -- -------------------------------------------------------------------------------------------
   base_enabled:
   if ZICNTR_EN generate
+    signal cycle_raw, instret_raw : std_ulogic_vector(63 downto 0);
+    signal cycle_word, instret_word, time_word : std_ulogic_vector(31 downto 0);
+  begin
+
+    cycle_word   <= cycle_raw(63 downto 32) when (ctrl_i.csr_addr(7) = '1') else cycle_raw(31 downto 0);
+    instret_word <= instret_raw(63 downto 32) when (ctrl_i.csr_addr(7) = '1') else instret_raw(31 downto 0);
+    time_word    <= mtime_i(63 downto 32) when (ctrl_i.csr_addr(7) = '1') else mtime_i(31 downto 0);
+    cycle_rd     <= cycle_word when (cnt_re(0) = '1') else (others => '0');
+    instret_rd   <= instret_word when (cnt_re(2) = '1') else (others => '0');
 
     -- [m]cycle[h] --
     cycle_inst: entity neorv32.neorv32_prim_cnt
@@ -214,12 +230,12 @@ begin
       inc_i  => cnt_inc(0),
       we_i   => cnt_we(0),
       data_i => ctrl_i.csr_wdata,
-      oe_i   => cnt_re(0),
-      cnt_o  => cycle_rd
+      oe_i   => '1',
+      cnt_o  => cycle_raw
     );
 
     -- time[h] --
-    time_rd <= mtime_i when (cnt_re(1) = '1') else (others => '0');
+    time_rd <= time_word when (cnt_re(1) = '1') else (others => '0');
 
     -- [m]instret[h] --
     instret_inst: entity neorv32.neorv32_prim_cnt
@@ -232,8 +248,8 @@ begin
       inc_i  => cnt_inc(2),
       we_i   => cnt_we(2),
       data_i => ctrl_i.csr_wdata,
-      oe_i   => cnt_re(2),
-      cnt_o  => instret_rd
+      oe_i   => '1',
+      cnt_o  => instret_raw
     );
 
   end generate;
@@ -254,6 +270,12 @@ begin
 
     hpm_gen:
     for i in 3 to (HPM_NUM + 3) - 1 generate
+      signal count_raw : std_ulogic_vector(63 downto 0);
+      signal count_word : std_ulogic_vector(31 downto 0);
+    begin
+
+      count_word <= count_raw(63 downto 32) when (ctrl_i.csr_addr(7) = '1') else count_raw(31 downto 0);
+      hpmcnt_rd(i) <= count_word when (cnt_re(i) = '1') else (others => '0');
 
       -- [m]hpmcnt[3..31][h] --
       hpmcnt_inst: entity neorv32.neorv32_prim_cnt
@@ -266,8 +288,8 @@ begin
         inc_i  => cnt_inc(i),
         we_i   => cnt_we(i),
         data_i => ctrl_i.csr_wdata,
-        oe_i   => cnt_re(i),
-        cnt_o  => hpmcnt_rd(i)
+        oe_i   => '1',
+        cnt_o  => count_raw
       );
 
       -- mhpmevent[3..31] --
@@ -294,12 +316,15 @@ begin
     end generate;
 
     -- read-back --
-    hpm_read_back: process(hpmcnt_rd, hpmevent_rd)
-      variable tmp_v : std_ulogic_vector(63 downto 0);
+    hpm_read_back: process(hpmcnt_rd, hpmevent_rd, ctrl_i.csr_addr)
+      variable tmp_v : std_ulogic_vector(31 downto 0);
     begin
       tmp_v := (others => '0');
       for i in 3 to 31 loop
-        tmp_v := tmp_v or hpmcnt_rd(i) or std_ulogic_vector(resize(unsigned(hpmevent_rd(i)), 64));
+        tmp_v := tmp_v or hpmcnt_rd(i);
+        if (ctrl_i.csr_addr(7) /= '1') then
+          tmp_v := tmp_v or std_ulogic_vector(resize(unsigned(hpmevent_rd(i)), 32));
+        end if;
       end loop;
       hpm_rd <= tmp_v;
     end process;

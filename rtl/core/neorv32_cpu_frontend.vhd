@@ -153,10 +153,11 @@ begin
   for i in 0 to 1 generate
     ipb_inst: entity neorv32.neorv32_prim_fifo
     generic map (
-      AWIDTH  => 1,
-      DWIDTH  => 17,
-      OUTGATE => false,
-      ASYNCRD => true
+      AWIDTH   => 1,
+      DWIDTH   => 17,
+      OUTGATE  => false,
+      ASYNCRD  => true,
+      LOCAL_WR => true
     )
     port map (
       -- global control --

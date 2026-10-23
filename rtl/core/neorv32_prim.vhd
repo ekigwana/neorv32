@@ -18,10 +18,11 @@ use ieee.numeric_std.all;
 
 entity neorv32_prim_fifo is
   generic (
-    AWIDTH  : natural; -- address width (= log2(number of FIFO entries))
-    DWIDTH  : natural; -- size of data elements in FIFO
-    OUTGATE : boolean; -- true = output zero if no data available
-    ASYNCRD : boolean  -- true = asynchronous read, false = synchronous read
+    AWIDTH   : natural; -- address width (= log2(number of FIFO entries))
+    DWIDTH   : natural; -- size of data elements in FIFO
+    OUTGATE  : boolean; -- true = output zero if no data available
+    ASYNCRD  : boolean; -- true = asynchronous read, false = synchronous read
+    LOCAL_WR : boolean := false -- true = per-entry write enables (asynchronous read only)
   );
   port (
     -- global control --
@@ -146,14 +147,35 @@ begin
     if ASYNCRD generate
       signal fifo : ram_t;
     begin
-      memory_core: process(clk_i) -- simple dual-port RAM
-      begin
-        if rising_edge(clk_i) then
-          if (we = '1') then
-            fifo(to_integer(unsigned(w_pnt(AWIDTH-1 downto 0)))) <= wdata_i;
+      indexed_write:
+      if not LOCAL_WR generate
+        memory_core: process(clk_i) -- simple dual-port RAM
+        begin
+          if rising_edge(clk_i) then
+            if (we = '1') then
+              fifo(to_integer(unsigned(w_pnt(AWIDTH-1 downto 0)))) <= wdata_i;
+            end if;
           end if;
-        end if;
-      end process;
+        end process;
+      end generate;
+
+      local_write:
+      if LOCAL_WR generate
+        signal w_index : natural range 0 to (2**AWIDTH)-1;
+      begin
+        w_index <= to_integer(unsigned(w_pnt(AWIDTH-1 downto 0))); -- unknown pointer selects entry 0 (as indexed)
+        entries:
+        for i in 0 to (2**AWIDTH)-1 generate
+          memory_core: process(clk_i) -- separate register per entry
+          begin
+            if rising_edge(clk_i) then
+              if (we = '1') and (w_index = i) then
+                fifo(i) <= wdata_i;
+              end if;
+            end if;
+          end process;
+        end generate;
+      end generate;
       rdata <= fifo(to_integer(unsigned(r_pnt(AWIDTH-1 downto 0))));
     end generate;
 
